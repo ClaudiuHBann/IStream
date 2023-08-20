@@ -4,6 +4,8 @@
     See LICENSE for the full terms of the MIT License.
 */
 
+#pragma once
+
 #include <cassert>
 #include <filesystem>
 #include <span>
