@@ -80,7 +80,7 @@ class IStream
      * last derived class will use ISTREAM_DESERIALIZE_DERIVED_END(...)
      * @param aStream the object as a rvalue stream
      */
-    IStream(type_stream &&aStream)
+    constexpr IStream(type_stream &&aStream) noexcept
     {
         Assign(move(aStream));
     }
