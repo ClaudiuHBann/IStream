@@ -111,16 +111,6 @@ class IStream
     virtual constexpr size_t GetObjectsSize() const noexcept = 0;
 
     /**
-     * @brief Getter/Setter for the internal stream
-     * @param aSelf C++23 magic
-     * @return (const) &(&) of the internal stream
-     */
-    template <class Self> [[nodiscard]] constexpr auto &&GetStream(this Self &&aSelf)
-    {
-        return forward<Self>(aSelf).mStream;
-    }
-
-    /**
      * @brief Calculates the required size in bytes to store the object in the stream
      * @tparam Type the current object's type
      * @tparam ...Types the rest of object's types
