@@ -12,18 +12,9 @@
 #include <string>
 #include <vector>
 
-namespace impla
-{
-template <typename Type> constexpr auto is_basic_string_v = false;
-
-template <typename... Type> constexpr auto is_basic_string_v<std::basic_string<Type...>> = true;
-} // namespace impla
-
-template <typename Type> constexpr auto is_basic_string_v = impla::is_basic_string_v<Type>;
-
-#define ISTREAM_GET_OBJECTS_SIZE(...) IStream::FindObjectsSize(__VA_ARGS__)
+#define ISTREAM_GET_OBJECTS_SIZE(...) hbann::IStreamUtility::FindObjectsSize(__VA_ARGS__)
 #define ISTREAM_GET_OBJECTS_SIZE_DERIVED_START(...) ISTREAM_GET_OBJECTS_SIZE(__VA_ARGS__)
-#define ISTREAM_GET_OBJECTS_SIZE_DERIVED(base, ...) base::GetObjectsSize() + IStream::FindObjectsSize(__VA_ARGS__)
+#define ISTREAM_GET_OBJECTS_SIZE_DERIVED(base, ...) base::GetObjectsSize() + ISTREAM_GET_OBJECTS_SIZE(__VA_ARGS__)
 #define ISTREAM_GET_OBJECTS_SIZE_DERIVED_END(base, ...) ISTREAM_GET_OBJECTS_SIZE_DERIVED(base, __VA_ARGS__)
 
 #define ISTREAM_SERIALIZE(...) IStream::InitAndWriteAll(__VA_ARGS__)
@@ -36,7 +27,144 @@ template <typename Type> constexpr auto is_basic_string_v = impla::is_basic_stri
 #define ISTREAM_DESERIALIZE_DERIVED(...) IStream::ReadAll(__VA_ARGS__)
 #define ISTREAM_DESERIALIZE_DERIVED_END(...) ISTREAM_DESERIALIZE(__VA_ARGS__)
 
-// TODO: make it work with ranges
+namespace hbann
+{
+template <typename> constexpr auto always_false = false;
+
+namespace impl
+{
+template <typename Type> constexpr auto is_basic_string_v = false;
+template <typename... Types> constexpr auto is_basic_string_v<std::basic_string<Types...>> = true;
+} // namespace impl
+
+template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<Type>;
+
+template <typename Type>
+constexpr auto is_accepted_no_range_v =
+    is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> || std::is_standard_layout_v<Type>;
+template <typename Type> constexpr auto is_accepted_v = std::ranges::range<Type> || is_accepted_no_range_v<Type>;
+
+/**
+ * @brief IStream utility class that calculates accepted objects size
+ */
+class IStreamUtility
+{
+  public:
+    using type_size_sub_stream = uint32_t; // the size type of a stream inside the internal stream
+
+    /**
+     * @brief Calculates the required size in bytes to store the object in the stream
+     * @note Used for any accepted type
+     * @tparam Type the current object's type
+     * @tparam ...Types the rest of object's types
+     * @param aObject the current object
+     * @param ...aObjects the rest of object
+     * @return the required size in bytes to store the object in the stream
+     */
+    template <typename Type, typename... Types>
+    static [[nodiscard]] constexpr decltype(auto) FindObjectsSize(const Type &aObject,
+                                                                  const Types &...aObjects) noexcept
+    {
+        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
+
+        if constexpr (std::ranges::range<Type> && !is_accepted_no_range_v<Type>)
+        {
+            return FindRangeSize(aObject) + FindObjectsSize(aObjects...);
+        }
+        else
+        {
+            return FindObjectSize(aObject) + FindObjectsSize(aObjects...);
+        }
+    }
+    /**
+     * @brief Calculates the required size in bytes to store the object in the stream
+     * @note Used for any accepted type without ranges
+     * @tparam Type the current object's type
+     * @param aObject the current object
+     * @return the required size in bytes to store the object in the stream
+     */
+    template <typename Type> static [[nodiscard]] constexpr decltype(auto) FindObjectSize(const Type &aObject) noexcept
+    {
+        if constexpr (is_basic_string_v<Type>)
+        {
+            const auto sizeInBytesOfStr = aObject.size() * sizeof(Type::value_type);
+            // not a known size object so add the size in bytes of it's leading size in bytes
+            return sizeof(type_size_sub_stream) + sizeInBytesOfStr;
+        }
+        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
+        {
+            const auto sizeInBytesOfPath = aObject.wstring().size() * sizeof(Type::value_type);
+            // not a known size object so add the size in bytes of it's leading size in bytes
+            return sizeof(type_size_sub_stream) + sizeInBytesOfPath;
+        }
+        else if constexpr (std::is_standard_layout_v<Type>)
+        {
+            return sizeof(Type);
+        }
+        else
+        {
+            static_assert(std::ranges::range<Type>, "Use FindRangeSize for ranges!");
+            static_assert(always_false<Type>, "The object's type is not accepted!");
+        }
+    }
+
+    /**
+     * @brief Get's the number of layers of a range
+     * @tparam Type the range's type
+     * @return the range's layers count
+     */
+    template <typename Type> static [[nodiscard]] constexpr size_t FindRangeLayersCount() noexcept
+    {
+        if constexpr (std::ranges::range<Type> && !is_accepted_no_range_v<Type>)
+        {
+            return 1 + FindRangeLayersCount<typename Type::value_type>();
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    /**
+     * @brief Calculates the required size in bytes to store the range in the stream
+     * @tparam Type the range's type
+     * @param aObject the range
+     * @return the required size in bytes to store the range in the stream
+     */
+    template <typename Type> static [[nodiscard]] constexpr size_t FindRangeSize(const Type &aObject) noexcept
+    {
+        if constexpr (FindRangeLayersCount<Type>())
+        {
+            // not a known size object so add the size in bytes of it's leading size in bytes
+            return sizeof(type_size_sub_stream) +
+                   std::ranges::size(aObject) * FindRangeSize(*std::ranges::cbegin(aObject));
+        }
+        else
+        {
+            return FindObjectSize(aObject);
+        }
+    }
+
+    /**
+     * @brief Used by FindObjectsSize(...) when there nothing to unfold
+     * @return 0
+     */
+    static constexpr size_t FindObjectsSize() noexcept
+    {
+        return 0;
+    }
+};
+
+/**
+ * @brief Fast and easy to use single-header parser with a simple format for C++20
+ *
+ * TODO:
+ *      - make it work with maps or pairs/tuples in general
+ *      - make useful methods static and public
+ *      - use ToStream for devired objects from itself
+ *      - don't leave all in IStream make a IStreamWriter, IStreamReader, IStreamBase...
+ *      - make ReadRange better by reserving the size of the data from the beggining like in vectors
+ */
 class IStream
 {
     /*
@@ -62,7 +190,7 @@ class IStream
     std::vector<uint8_t> mStream{};
 
   public:
-    using type_size_sub_stream = uint32_t; // the size type of a stream inside the internal stream
+    using type_size_sub_stream = IStreamUtility::type_size_sub_stream;
     using type_stream = decltype(mStream);
     using type_stream_value = type_stream::value_type;
 
@@ -80,7 +208,7 @@ class IStream
      * last derived class will use ISTREAM_DESERIALIZE_DERIVED_END(...)
      * @param aStream the object as a rvalue stream
      */
-    constexpr IStream(type_stream &&aStream) noexcept
+    constexpr explicit IStream(type_stream &&aStream) noexcept
     {
         Assign(move(aStream));
     }
@@ -109,35 +237,6 @@ class IStream
      * @brief Gets the required size to store the object
      */
     virtual constexpr size_t GetObjectsSize() const noexcept = 0;
-
-    /**
-     * @brief Calculates the required size in bytes to store the object in the stream
-     * @tparam Type the current object's type
-     * @tparam ...Types the rest of object's types
-     * @param aObject the current object
-     * @param ...aObjects the rest of object
-     * @return the required size in bytes to store the object in the stream
-     */
-    template <typename Type, typename... Types>
-    [[nodiscard]] constexpr decltype(auto) FindObjectsSize(const Type &aObject, const Types &...aObjects) const noexcept
-    {
-        if constexpr (is_basic_string_v<Type>)
-        {
-            const auto sizeInBytesOfStr = aObject.size() * sizeof(Type::value_type);
-            // not a known size object so add the size in bytes of it's leading size in bytes
-            return sizeof(type_size_sub_stream) + sizeInBytesOfStr + FindObjectsSize(aObjects...);
-        }
-        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
-        {
-            const auto sizeInBytesOfPath = aObject.wstring().size() * sizeof(Type::value_type);
-            // not a known size object so add the size in bytes of it's leading size in bytes
-            return sizeof(type_size_sub_stream) + sizeInBytesOfPath + FindObjectsSize(aObjects...);
-        }
-        else if constexpr (std::is_arithmetic_v<Type> || std::is_enum_v<Type> || std::is_standard_layout_v<Type>)
-        {
-            return sizeof(Type) + FindObjectsSize(aObjects...);
-        }
-    }
 
     /**
      * @brief Initializes the stream and writes all the objects to it
@@ -231,6 +330,8 @@ class IStream
      */
     template <typename Type = void *> constexpr void Write(const Type &aObject, const type_size_sub_stream aSize = 0)
     {
+        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
+
         if constexpr (is_basic_string_v<Type>)
         {
             auto size = type_size_sub_stream(aObject.size() * sizeof(Type::value_type));
@@ -240,9 +341,14 @@ class IStream
         {
             Write(aObject.wstring());
         }
-        else if constexpr (std::is_arithmetic_v<Type> || std::is_enum_v<Type> || std::is_standard_layout_v<Type>)
+        else if constexpr (std::is_standard_layout_v<Type>)
         {
             WriteObjectOfKnownSize(&aObject, sizeof(Type));
+        }
+        // last check because types like string and path are ranges
+        else if constexpr (std::ranges::range<Type>)
+        {
+            WriteRange(aObject);
         }
         else
         {
@@ -275,6 +381,8 @@ class IStream
      */
     template <typename Type = std::span<type_stream_value>> [[nodiscard]] constexpr decltype(auto) Read() noexcept
     {
+        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
+
         if constexpr (is_basic_string_v<Type>)
         {
             const auto [ptr, size] = ReadStream<Type>();
@@ -285,11 +393,15 @@ class IStream
             const auto [ptr, size] = ReadStream<Type>();
             return basic_string<std::filesystem::path::value_type>(ptr, size);
         }
-        else if constexpr (std::is_arithmetic_v<Type> || std::is_enum_v<Type> ||
-                           // std::is_standard_layout_v is true for span but we want the last branch for spans so:
-                           (std::is_standard_layout_v<Type> && !std::is_same_v<Type, std::span<type_stream_value>>))
+        // std::is_standard_layout_v is true for span but we want the last branch for spans so:
+        else if constexpr (std::is_standard_layout_v<Type> && !std::is_same_v<Type, std::span<type_stream_value>>)
         {
             return ReadObjectOfKnownSize<Type>();
+        }
+        // last check because types like string and path are ranges
+        else if constexpr (std::ranges::range<Type>)
+        {
+            return ReadRange<Type>();
         }
         else
         {
@@ -316,27 +428,13 @@ class IStream
     }
 
     /**
-     * @brief Used by FindObjectsSize(...) when there nothing to unfold
-     * @return 0
-     */
-    constexpr size_t FindObjectsSize() const noexcept
-    {
-        return 0;
-    }
-
-    /**
      * @brief Writes a number of bytes from stream
      * @param aStream the stream
      * @param aSize the number of bytes to write
      */
     void WriteObject(const void *aStream, const type_size_sub_stream aSize)
     {
-        assert(aSize);
-
-        // write the stream's size as bytes
-        const auto sizePtr = reinterpret_cast<const type_stream_value *>(&aSize);
-        mStream.insert(mStream.end(), sizePtr, sizePtr + sizeof(type_size_sub_stream));
-        mIndex += sizeof(type_size_sub_stream);
+        WriteSize(aSize);
 
         // write the stream
         const auto streamPtr = reinterpret_cast<const type_stream_value *>(aStream);
@@ -352,9 +450,70 @@ class IStream
      */
     void WriteObjectOfKnownSize(const void *aStream, const type_size_sub_stream aSize)
     {
+        assert(aSize);
+
         const auto streamPtr = reinterpret_cast<const type_stream_value *>(aStream);
         mStream.insert(mStream.end(), streamPtr, streamPtr + aSize);
         mIndex += aSize;
+    }
+
+    /**
+     * @brief Writes any nested range to the stream
+     * @tparam Type the nested range object type
+     */
+    template <std::ranges::range Range> constexpr void WriteRange(const Range &aRange)
+    {
+        WriteSize(type_size_sub_stream(std::ranges::size(aRange)));
+        if constexpr (!is_accepted_no_range_v<Range> && IStreamUtility::FindRangeLayersCount<Range>() > 1)
+        {
+            std::ranges::for_each(aRange, [this](const auto &aObject) { WriteRange(aObject); });
+        }
+        else
+        {
+            std::ranges::for_each(aRange, [this](const auto &aObject) { Write(aObject); });
+        }
+    }
+
+    /**
+     * @brief Reads any nested range from the stream
+     * @tparam Type the nested range object type
+     * @return the nested range object
+     */
+    template <typename Type> [[nodiscard]] constexpr decltype(auto) ReadRange()
+    {
+        Type object{};
+        const auto size = ReadSize();
+
+        if constexpr (IStreamUtility::FindRangeLayersCount<Type>() > 1)
+        {
+            for (size_t i = 0; i < size; i++)
+            {
+                object.insert(std::ranges::cend(object), ReadRange<typename Type::value_type>());
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < size; i++)
+            {
+                object.insert(std::ranges::cend(object), Read<typename Type::value_type>());
+            }
+        }
+
+        return object;
+    }
+
+    /**
+     * @brief Writes the size as bytes to the stream
+     * @param aSize the size
+     */
+    void WriteSize(const type_size_sub_stream aSize)
+    {
+        assert(aSize);
+
+        // write the stream's size as bytes
+        const auto sizePtr = reinterpret_cast<const type_stream_value *>(&aSize);
+        mStream.insert(mStream.end(), sizePtr, sizePtr + sizeof(type_size_sub_stream));
+        mIndex += sizeof(type_size_sub_stream);
     }
 
     /**
@@ -412,3 +571,4 @@ class IStream
         return *objectPtr;
     }
 };
+} // namespace hbann
