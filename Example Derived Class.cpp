@@ -1,5 +1,7 @@
 #include "IStream.hpp"
 
+using namespace hbann;
+
 #include <format>
 #include <iostream>
 
