@@ -43,6 +43,14 @@ namespace impl
 {
 template <typename Type> constexpr auto is_basic_string_v = false;
 template <typename... Types> constexpr auto is_basic_string_v<std::basic_string<Types...>> = true;
+
+template <typename Container, typename = void> struct has_method_reserve : std::false_type
+{
+};
+template <typename Container>
+struct has_method_reserve<Container, std::void_t<decltype(std::declval<Container>().reserve(0))>> : std::true_type
+{
+};
 } // namespace impl
 
 #pragma endregion
@@ -52,6 +60,7 @@ template <typename... Types> constexpr auto is_basic_string_v<std::basic_string<
 template <typename> constexpr auto always_false = false; // used with static_assert
 
 template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<Type>;
+template <typename Type> constexpr auto has_method_reserve_v = impl::has_method_reserve<Type>::value;
 
 class IStreamable;
 
@@ -159,9 +168,17 @@ class StreamableSizeFinder
     {
         if constexpr (FindRangeLayersCount<Type>())
         {
-            // not a known size object so add the size in bytes of it's leading size in bytes
-            return sizeof(type_size_sub_stream) +
-                   std::ranges::size(aObject) * FindRangeSize(*std::ranges::cbegin(aObject));
+            const auto size = std::ranges::size(aObject);
+            if (size)
+            {
+                // not a known size object so add the size in bytes of it's leading size in bytes
+                return sizeof(type_size_sub_stream) + size * FindRangeSize(*std::ranges::cbegin(aObject));
+            }
+            else
+            {
+                // if there are no elements in the nested stream we still need to specify that
+                return sizeof(type_size_sub_stream);
+            }
         }
         else
         {
@@ -388,8 +405,6 @@ class IStreamable
      */
     void WriteSize(const type_size_sub_stream aSize)
     {
-        assert(aSize);
-
         // write the stream's size as bytes
         const auto sizePtr = reinterpret_cast<const type_stream_value *>(&aSize);
         mStream.insert(mStream.end(), sizePtr, sizePtr + sizeof(type_size_sub_stream));
@@ -431,7 +446,8 @@ class IStreamable
         }
         else if constexpr (std::is_same_v<Type, std::filesystem::path>)
         {
-            Write(aObject.wstring());
+            const auto wstr(aObject.wstring());
+            Write(wstr);
         }
         else if constexpr (std::is_standard_layout_v<Type>)
         {
@@ -592,6 +608,10 @@ class IStreamable
     {
         Range range{};
         const auto size = ReadSize();
+        if constexpr (has_method_reserve_v<Range>)
+        {
+            range.reserve(size);
+        }
 
         if constexpr (StreamableSizeFinder::FindRangeLayersCount<Range>() > 1)
         {
@@ -660,12 +680,9 @@ class IStreamable
  *
  *  Enchantments:
  *      - do something about the copy from ReadStreamable
- *      - make useful methods static and public
  *      - don't leave all in IStreamable make a IStreamWriter, IStreamReader, IStreamBase...
- *      - make ReadRange better by reserving the size of the data from the beggining like in vectors
  *
  *  Bugs:
- *      - fix crash on dereferencing end iterator for ranges with 0 items
  *      - objects that implement IStreamable and have iterators, maybe will work but wrong anyways
  */
 
