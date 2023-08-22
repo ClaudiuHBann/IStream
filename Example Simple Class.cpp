@@ -73,7 +73,6 @@ class Something : public IStreamable
 
 int main()
 {
-    // simple class IStream manipulation 1
     Something smthStart(guid_random, "Smth", path_random, 123);
     smthStart.Print();
 
