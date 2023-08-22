@@ -1,2 +1,2 @@
 # IStream
-Fast and easy to use single-header (de)serializer with a simple format.
+Fast and easy to use single-header parser with a simple format for C++20.
