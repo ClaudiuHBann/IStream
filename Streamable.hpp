@@ -1,35 +1,43 @@
+#ifndef ISTREAMABLE_HPP
+#define ISTREAMABLE_HPP
+
 /*
     Copyright (c) 2023 Claudiu HBann
 
     See LICENSE for the full terms of the MIT License.
 */
 
-#pragma once
+#pragma region Includes
 
-#include <cassert>
-#include <filesystem>
+#include <assert.h>
+#include <filesystem> // std::filesystem::path
 #include <span>
-#include <string>
-#include <vector>
 
-#define ISTREAM_GET_OBJECTS_SIZE(...) hbann::IStreamUtility::FindObjectsSize(__VA_ARGS__)
-#define ISTREAM_GET_OBJECTS_SIZE_DERIVED_START(...) ISTREAM_GET_OBJECTS_SIZE(__VA_ARGS__)
-#define ISTREAM_GET_OBJECTS_SIZE_DERIVED(base, ...) base::GetObjectsSize() + ISTREAM_GET_OBJECTS_SIZE(__VA_ARGS__)
-#define ISTREAM_GET_OBJECTS_SIZE_DERIVED_END(base, ...) ISTREAM_GET_OBJECTS_SIZE_DERIVED(base, __VA_ARGS__)
+#pragma endregion
 
-#define ISTREAM_SERIALIZE(...) IStream::InitAndWriteAll(__VA_ARGS__)
-#define ISTREAM_SERIALIZE_DERIVED_START(...) ISTREAM_SERIALIZE(__VA_ARGS__)
-#define ISTREAM_SERIALIZE_DERIVED(base, ...) IStream::AssignAndWriteAll(base::ToStream(), __VA_ARGS__)
-#define ISTREAM_SERIALIZE_DERIVED_END(base, ...) ISTREAM_SERIALIZE_DERIVED(base, __VA_ARGS__)
+#pragma region Defines
 
-#define ISTREAM_DESERIALIZE(...) IStream::ReadAllAndClear(__VA_ARGS__)
-#define ISTREAM_DESERIALIZE_DERIVED_START(...) ISTREAM_DESERIALIZE_DERIVED(__VA_ARGS__)
-#define ISTREAM_DESERIALIZE_DERIVED(...) IStream::ReadAll(__VA_ARGS__)
-#define ISTREAM_DESERIALIZE_DERIVED_END(...) ISTREAM_DESERIALIZE(__VA_ARGS__)
+#define ISTREAMABLE_GET_OBJECTS_SIZE(...) hbann::StreamableSizeFinder::FindObjectsSize(__VA_ARGS__)
+#define ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_START(...) ISTREAMABLE_GET_OBJECTS_SIZE(__VA_ARGS__)
+#define ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED(base, ...)                                                                \
+    base::GetObjectsSize() + ISTREAMABLE_GET_OBJECTS_SIZE(__VA_ARGS__)
+#define ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(base, ...) ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED(base, __VA_ARGS__)
+
+#define ISTREAMABLE_SERIALIZE(...) IStreamable::InitAndWriteAll(__VA_ARGS__)
+#define ISTREAMABLE_SERIALIZE_DERIVED_START(...) ISTREAMABLE_SERIALIZE(__VA_ARGS__)
+#define ISTREAMABLE_SERIALIZE_DERIVED(base, ...) IStreamable::AssignAndWriteAll(base::ToStream(), __VA_ARGS__)
+#define ISTREAMABLE_SERIALIZE_DERIVED_END(base, ...) ISTREAMABLE_SERIALIZE_DERIVED(base, __VA_ARGS__)
+
+#define ISTREAMABLE_DESERIALIZE(...) IStreamable::ReadAllAndClear(__VA_ARGS__)
+#define ISTREAMABLE_DESERIALIZE_DERIVED_START(...) ISTREAMABLE_DESERIALIZE_DERIVED(__VA_ARGS__)
+#define ISTREAMABLE_DESERIALIZE_DERIVED(...) IStreamable::ReadAll(__VA_ARGS__)
+#define ISTREAMABLE_DESERIALIZE_DERIVED_END(...) ISTREAMABLE_DESERIALIZE(__VA_ARGS__)
+
+#pragma endregion
 
 namespace hbann
 {
-template <typename> constexpr auto always_false = false;
+#pragma region Type Traits Impl
 
 namespace impl
 {
@@ -37,17 +45,26 @@ template <typename Type> constexpr auto is_basic_string_v = false;
 template <typename... Types> constexpr auto is_basic_string_v<std::basic_string<Types...>> = true;
 } // namespace impl
 
+#pragma endregion
+
+#pragma region Type Traits
+
+template <typename> constexpr auto always_false = false; // used with static_assert
+
 template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<Type>;
 
+// useful type traits
 template <typename Type>
 constexpr auto is_accepted_no_range_v =
     is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> || std::is_standard_layout_v<Type>;
 template <typename Type> constexpr auto is_accepted_v = std::ranges::range<Type> || is_accepted_no_range_v<Type>;
 
+#pragma endregion
+
 /**
- * @brief IStream utility class that calculates accepted objects size
+ * @brief Calculates the size in bytes of the objects
  */
-class IStreamUtility
+class StreamableSizeFinder
 {
   public:
     using type_size_sub_stream = uint32_t; // the size type of a stream inside the internal stream
@@ -76,6 +93,7 @@ class IStreamUtility
             return FindObjectSize(aObject) + FindObjectsSize(aObjects...);
         }
     }
+
     /**
      * @brief Calculates the required size in bytes to store the object in the stream
      * @note Used for any accepted type without ranges
@@ -131,7 +149,7 @@ class IStreamUtility
      * @param aObject the range
      * @return the required size in bytes to store the range in the stream
      */
-    template <typename Type> static [[nodiscard]] constexpr size_t FindRangeSize(const Type &aObject) noexcept
+    template <typename Type> static [[nodiscard]] constexpr decltype(auto) FindRangeSize(const Type &aObject) noexcept
     {
         if constexpr (FindRangeLayersCount<Type>())
         {
@@ -145,6 +163,7 @@ class IStreamUtility
         }
     }
 
+  private:
     /**
      * @brief Used by FindObjectsSize(...) when there nothing to unfold
      * @return 0
@@ -157,15 +176,8 @@ class IStreamUtility
 
 /**
  * @brief Fast and easy to use single-header parser with a simple format for C++20
- *
- * TODO:
- *      - make it work with maps or pairs/tuples in general
- *      - make useful methods static and public
- *      - use ToStream for devired objects from itself
- *      - don't leave all in IStream make a IStreamWriter, IStreamReader, IStreamBase...
- *      - make ReadRange better by reserving the size of the data from the beggining like in vectors
  */
-class IStream
+class IStreamable
 {
     /*
         Format: [4 bytes +] any data + repeat...
@@ -190,25 +202,25 @@ class IStream
     std::vector<uint8_t> mStream{};
 
   public:
-    using type_size_sub_stream = IStreamUtility::type_size_sub_stream;
+    using type_size_sub_stream = StreamableSizeFinder::type_size_sub_stream;
     using type_stream = decltype(mStream);
     using type_stream_value = type_stream::value_type;
 
     /**
      * @brief Default constructor used with ToStream
      */
-    constexpr IStream() noexcept = default;
+    constexpr IStreamable() noexcept = default;
 
     /**
      * @brief Converts the stream to an object
-     * @note Flow with simple classes: ISTREAM_SERIALIZE(...) in class
+     * @note Flow with simple classes: ISTREAMABLE_SERIALIZE(...) in class
      * @note Flow with base/derived classes:
-     * base class will use ISTREAM_DESERIALIZE_DERIVED_START(...)
-     * middle derived classes will use ISTREAM_DESERIALIZE_DERIVED(...)
-     * last derived class will use ISTREAM_DESERIALIZE_DERIVED_END(...)
+     * base class will use ISTREAMABLE_DESERIALIZE_DERIVED_START(...)
+     * middle derived classes will use ISTREAMABLE_DESERIALIZE_DERIVED(...)
+     * last derived class will use ISTREAMABLE_DESERIALIZE_DERIVED_END(...)
      * @param aStream the object as a rvalue stream
      */
-    constexpr explicit IStream(type_stream &&aStream) noexcept
+    constexpr explicit IStreamable(type_stream &&aStream) noexcept
     {
         Assign(move(aStream));
     }
@@ -216,21 +228,21 @@ class IStream
     /**
      * @brief Uhmm, just a destructor..
      */
-    constexpr virtual ~IStream() noexcept = default;
+    constexpr virtual ~IStreamable() noexcept = default;
 
     /**
      * @brief Converts the object to a stream
-     * @note Flow with simple classes: ISTREAM_DESERIALIZE(...) in class
+     * @note Flow with simple classes: ISTREAMABLE_DESERIALIZE(...) in class
      * @note Flow with base/derived classes:
-     * base class will use ISTREAM_SERIALIZE_DERIVED_START(...)
-     * middle derived classes will use ISTREAM_SERIALIZE_DERIVED(...)
-     * last derived class will use ISTREAM_SERIALIZE_DERIVED_END(...)
+     * base class will use ISTREAMABLE_SERIALIZE_DERIVED_START(...)
+     * middle derived classes will use ISTREAMABLE_SERIALIZE_DERIVED(...)
+     * last derived class will use ISTREAMABLE_SERIALIZE_DERIVED_END(...)
      * @return the object as a rvalue stream
      */
     virtual [[nodiscard]] type_stream &&ToStream() = 0;
 
     // C++20 magic
-    auto operator<=>(const IStream &) const = default;
+    auto operator<=>(const IStreamable &) const = default;
 
   protected:
     /**
@@ -464,7 +476,7 @@ class IStream
     template <std::ranges::range Range> constexpr void WriteRange(const Range &aRange)
     {
         WriteSize(type_size_sub_stream(std::ranges::size(aRange)));
-        if constexpr (!is_accepted_no_range_v<Range> && IStreamUtility::FindRangeLayersCount<Range>() > 1)
+        if constexpr (!is_accepted_no_range_v<Range> && StreamableSizeFinder::FindRangeLayersCount<Range>() > 1)
         {
             std::ranges::for_each(aRange, [this](const auto &aObject) { WriteRange(aObject); });
         }
@@ -484,7 +496,7 @@ class IStream
         Type object{};
         const auto size = ReadSize();
 
-        if constexpr (IStreamUtility::FindRangeLayersCount<Type>() > 1)
+        if constexpr (StreamableSizeFinder::FindRangeLayersCount<Type>() > 1)
         {
             for (size_t i = 0; i < size; i++)
             {
@@ -572,3 +584,14 @@ class IStream
     }
 };
 } // namespace hbann
+
+/*
+ * TODO:
+ *      - make it work with maps or pairs/tuples in general
+ *      - make useful methods static and public
+ *      - use ToStream for devired objects from itself
+ *      - don't leave all in IStreamable make a IStreamWriter, IStreamReader, IStreamBase...
+ *      - make ReadRange better by reserving the size of the data from the beggining like in vectors
+ */
+
+#endif // !ISTREAMABLE_HPP
