@@ -1,4 +1,4 @@
-#include "IStream.hpp"
+#include "Streamable.hpp"
 
 using namespace hbann;
 
@@ -31,12 +31,12 @@ wstring to_wstring(const guid &aGUID)
     return buffer;
 }
 
-class Something : public IStream
+class Something : public IStreamable
 {
   public:
-    Something(type_stream &&aStream) : IStream(move(aStream))
+    Something(type_stream &&aStream) : IStreamable(move(aStream))
     {
-        ISTREAM_DESERIALIZE(mID, mNickname, mPath, mIDK);
+        ISTREAMABLE_DESERIALIZE(mID, mNickname, mPath, mIDK);
     }
 
     Something(const guid &aID, const string &aNickname, const path &aPath, const size_t aAge)
@@ -46,7 +46,7 @@ class Something : public IStream
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE(mID, mNickname, mPath, mIDK);
+        return ISTREAMABLE_SERIALIZE(mID, mNickname, mPath, mIDK);
     }
 
     void Print()
@@ -61,7 +61,7 @@ class Something : public IStream
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE(mID, mNickname, mPath, mIDK);
+        return ISTREAMABLE_GET_OBJECTS_SIZE(mID, mNickname, mPath, mIDK);
     }
 
   private:
