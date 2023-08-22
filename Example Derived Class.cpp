@@ -1,4 +1,4 @@
-#include "IStream.hpp"
+#include "Streamable.hpp"
 
 using namespace hbann;
 
@@ -7,7 +7,7 @@ using namespace hbann;
 
 using namespace std;
 
-class Shape : public IStream
+class Shape : public IStreamable
 {
   public:
     enum class Type : uint8_t
@@ -18,9 +18,9 @@ class Shape : public IStream
         CIRCLE
     };
 
-    Shape(type_stream &&aStream) : IStream(move(aStream))
+    Shape(type_stream &&aStream) : IStreamable(move(aStream))
     {
-        ISTREAM_DESERIALIZE_DERIVED_START(mType);
+        ISTREAMABLE_DESERIALIZE_DERIVED_START(mType);
     }
 
     Shape(const Type &aType) : mType(aType)
@@ -29,7 +29,7 @@ class Shape : public IStream
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE_DERIVED_START(mType);
+        return ISTREAMABLE_SERIALIZE_DERIVED_START(mType);
     }
 
     void Print()
@@ -40,7 +40,7 @@ class Shape : public IStream
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE_DERIVED_START(mType);
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_START(mType);
     }
 
   private:
@@ -52,7 +52,7 @@ class Circle : public Shape
   public:
     Circle(type_stream &&aStream) : Shape(move(aStream))
     {
-        ISTREAM_DESERIALIZE_DERIVED_END(mRadius);
+        ISTREAMABLE_DESERIALIZE_DERIVED_END(mRadius);
     }
 
     Circle(const double aRadius) : Shape(Type::CIRCLE), mRadius(aRadius)
@@ -61,7 +61,7 @@ class Circle : public Shape
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE_DERIVED_END(Shape, mRadius);
+        return ISTREAMABLE_SERIALIZE_DERIVED_END(Shape, mRadius);
     }
 
     void Print()
@@ -73,7 +73,7 @@ class Circle : public Shape
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE_DERIVED_END(Shape, mRadius);
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(Shape, mRadius);
     }
 
   private:
@@ -82,7 +82,6 @@ class Circle : public Shape
 
 int main()
 {
-    // devired class IStream manipulation 2
     Shape *shapeStart1 = new Circle(3.14156);
     ((Circle *)shapeStart1)->Print();
 
