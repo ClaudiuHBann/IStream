@@ -1,4 +1,4 @@
-#include "IStream.hpp"
+#include "Streamable.hpp"
 
 using namespace hbann;
 
@@ -31,12 +31,12 @@ void Print(
 
 #include <set>
 
-class NestedRange : public IStream
+class NestedRange : public IStreamable
 {
   public:
-    explicit NestedRange(type_stream &&aStream) : IStream(std::move(aStream))
+    explicit NestedRange(type_stream &&aStream) : IStreamable(std::move(aStream))
     {
-        ISTREAM_DESERIALIZE(mInts);
+        ISTREAMABLE_DESERIALIZE(mInts);
     }
 
     NestedRange(const vector<list<set<double>>> &aInts) : mInts(aInts)
@@ -45,7 +45,7 @@ class NestedRange : public IStream
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE(mInts);
+        return ISTREAMABLE_SERIALIZE(mInts);
     }
 
     void Print() const noexcept
@@ -56,7 +56,7 @@ class NestedRange : public IStream
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE(mInts);
+        return ISTREAMABLE_GET_OBJECTS_SIZE(mInts);
     }
 
   private:
