@@ -1,4 +1,4 @@
-#include "IStream.hpp"
+#include "Streamable.hpp"
 
 using namespace hbann;
 
@@ -7,7 +7,7 @@ using namespace hbann;
 
 using namespace std;
 
-class Shape : public IStream
+class Shape : public IStreamable
 {
   public:
     enum class Type : uint8_t
@@ -18,9 +18,9 @@ class Shape : public IStream
         CIRCLE
     };
 
-    Shape(type_stream &&aStream) : IStream(move(aStream))
+    Shape(type_stream &&aStream) : IStreamable(move(aStream))
     {
-        ISTREAM_DESERIALIZE_DERIVED_START(mType);
+        ISTREAMABLE_DESERIALIZE_DERIVED_START(mType);
     }
 
     Shape(const Type &aType) : mType(aType)
@@ -29,7 +29,7 @@ class Shape : public IStream
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE_DERIVED_START(mType);
+        return ISTREAMABLE_SERIALIZE_DERIVED_START(mType);
     }
 
     void Print()
@@ -40,7 +40,7 @@ class Shape : public IStream
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE_DERIVED_START(mType);
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_START(mType);
     }
 
   private:
@@ -52,7 +52,7 @@ class Rectangle : public Shape
   public:
     Rectangle(type_stream &&aStream) : Shape(move(aStream))
     {
-        ISTREAM_DESERIALIZE_DERIVED(mLength, mWidth);
+        ISTREAMABLE_DESERIALIZE_DERIVED(mLength, mWidth);
     }
 
     Rectangle(const double aLengthWidth) : Shape(Type::SQUARE), mLength(aLengthWidth), mWidth(aLengthWidth)
@@ -61,7 +61,7 @@ class Rectangle : public Shape
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE_DERIVED(Shape, mLength, mWidth);
+        return ISTREAMABLE_SERIALIZE_DERIVED(Shape, mLength, mWidth);
     }
 
     void Print()
@@ -73,7 +73,7 @@ class Rectangle : public Shape
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE_DERIVED(Shape, mLength, mWidth);
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED(Shape, mLength, mWidth);
     }
 
   private:
@@ -86,7 +86,7 @@ class Square : public Rectangle
   public:
     Square(type_stream &&aStream) : Rectangle(move(aStream))
     {
-        ISTREAM_DESERIALIZE_DERIVED_END(mDiagonal);
+        ISTREAMABLE_DESERIALIZE_DERIVED_END(mDiagonal);
     }
 
     Square(const double aSide) : Rectangle(aSide), mDiagonal(aSide / std::sqrt(2))
@@ -95,7 +95,7 @@ class Square : public Rectangle
 
     type_stream &&ToStream() override
     {
-        return ISTREAM_SERIALIZE_DERIVED_END(Rectangle, mDiagonal);
+        return ISTREAMABLE_SERIALIZE_DERIVED_END(Rectangle, mDiagonal);
     }
 
     void Print()
@@ -107,7 +107,7 @@ class Square : public Rectangle
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAM_GET_OBJECTS_SIZE_DERIVED_END(Rectangle, mDiagonal);
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(Rectangle, mDiagonal);
     }
 
   private:
@@ -116,7 +116,6 @@ class Square : public Rectangle
 
 int main()
 {
-    // devired class IStream manipulation 3
     Shape *shapeStart3 = new Square(123.456);
     ((Square *)shapeStart3)->Print();
 
