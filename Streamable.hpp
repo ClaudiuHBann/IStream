@@ -673,17 +673,4 @@ class IStreamable
 };
 } // namespace hbann
 
-/*
- * TODO:
- *  Features:
- *      - make it work with maps or pairs/tuples in general
- *
- *  Enchantments:
- *      - do something about the copy from ReadStreamable
- *      - don't leave all in IStreamable make a IStreamWriter, IStreamReader, IStreamBase...
- *
- *  Bugs:
- *      - objects that implement IStreamable and have iterators, maybe will work but wrong anyways
- */
-
 #endif // !ISTREAMABLE_HPP
