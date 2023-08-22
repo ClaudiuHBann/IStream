@@ -36,31 +36,31 @@ class NestedRange : public IStreamable
   public:
     explicit NestedRange(type_stream &&aStream) : IStreamable(std::move(aStream))
     {
-        ISTREAMABLE_DESERIALIZE(mInts);
+        ISTREAMABLE_DESERIALIZE(mDoubles);
     }
 
-    NestedRange(const vector<list<set<double>>> &aInts) : mInts(aInts)
+    NestedRange(const vector<list<set<double>>> &aInts) : mDoubles(aInts)
     {
     }
 
     type_stream &&ToStream() override
     {
-        return ISTREAMABLE_SERIALIZE(mInts);
+        return ISTREAMABLE_SERIALIZE(mDoubles);
     }
 
-    void Print() const noexcept
+    void Print()
     {
-        ::Print<double>(mInts);
+        ::Print<double>(mDoubles);
     }
 
   protected:
     constexpr size_t GetObjectsSize() const noexcept override
     {
-        return ISTREAMABLE_GET_OBJECTS_SIZE(mInts);
+        return ISTREAMABLE_GET_OBJECTS_SIZE(mDoubles);
     }
 
   private:
-    vector<list<set<double>>> mInts{};
+    vector<list<set<double>>> mDoubles{};
 };
 
 int main()
