@@ -1,7 +1,5 @@
 # Streamable
 
-Fast and easy-to-use single-header parser with a simple format for C++20 and NO dependencies.
-
 This library is all about speedy data parsing, churning out super small byte streams.
 
 ## Table of Contents
