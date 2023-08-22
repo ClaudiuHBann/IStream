@@ -2,7 +2,7 @@
 
 Fast and easy-to-use single-header parser with a simple format for C++20 and NO dependencies.
 
-This library is at its best when used for networking purposes because of it's fast parsing and very small resulted stream of bytes.
+This library is all about speedy data parsing, churning out super small byte streams.
 
 ## Table of Contents
 
@@ -17,8 +17,6 @@ This library is at its best when used for networking purposes because of it's fa
 
 To use this library, simply get and include the header file `Streamable.hpp` into your project.
 
-This library is all about speedy data parsing, churning out super small byte streams.
-
 ## Features
 
 - **fast** - the parsing represents just a simple iteration, knows where every object is and how big it is, for example it reserves the memory for ranges that allow it before adding elements etc...
@@ -26,7 +24,7 @@ This library is all about speedy data parsing, churning out super small byte str
 - **single-header** - just copy paste the file in your project
 - **simple format** - contains just the data itself and for the types that have a dynamic size a metadata representing just a uint32_t
 - **has no dependencies** - uses just the standard library
-- **accepts multiple data types** - beside **itself** ofc, **primitive types** (ex.: bool, unsigned int, double etc...), **strings** (ex.: std::string. std::wstring etc...), **any type with standard layout** (ex.: POD structs and classes, enums, etc...), **nested ranges** (ex.: vector, list, vector&lt;list&lt; etc...), and bonus types like *std::filesystem::path* etc...
+- **accepts multiple data types** - beside **itself** ofc, **primitive types** (ex.: bool, unsigned int, double etc...), **strings** (ex.: std::string. std::wstring etc...), **any type with standard layout** (ex.: POD structs and classes, enums, etc...), **nested ranges** (ex.: vector, list, vector&lt;list&gt; etc...), and bonus types like *std::filesystem::path* etc...
 
 ## Usage
 
