@@ -53,10 +53,12 @@ template <typename> constexpr auto always_false = false; // used with static_ass
 
 template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<Type>;
 
+class IStreamable;
+
 // useful type traits
 template <typename Type>
-constexpr auto is_accepted_no_range_v =
-    is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> || std::is_standard_layout_v<Type>;
+constexpr auto is_accepted_no_range_v = is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> ||
+                                        std::is_standard_layout_v<Type> || std::is_base_of_v<IStreamable, Type>;
 template <typename Type> constexpr auto is_accepted_v = std::ranges::range<Type> || is_accepted_no_range_v<Type>;
 
 #pragma endregion
@@ -119,6 +121,10 @@ class StreamableSizeFinder
         {
             return sizeof(Type);
         }
+        else if constexpr (std::is_base_of_v<IStreamable, Type>)
+        {
+            return static_cast<const IStreamable *>(&aObject)->GetObjectsSize();
+        }
         else
         {
             static_assert(std::ranges::range<Type>, "Use FindRangeSize for ranges!");
@@ -163,7 +169,6 @@ class StreamableSizeFinder
         }
     }
 
-  private:
     /**
      * @brief Used by FindObjectsSize(...) when there nothing to unfold
      * @return 0
@@ -179,6 +184,8 @@ class StreamableSizeFinder
  */
 class IStreamable
 {
+    friend class StreamableSizeFinder;
+
     /*
         Format: [4 bytes +] any data + repeat...
 
@@ -250,14 +257,21 @@ class IStreamable
      */
     virtual constexpr size_t GetObjectsSize() const noexcept = 0;
 
+#pragma region XWriteAll
+
     /**
      * @brief Initializes the stream and writes all the objects to it
      * @return the rvalue stream
      */
-    template <typename... Types> [[nodiscard]] constexpr decltype(auto) InitAndWriteAll(const Types &...aObjects)
+    template <typename... Types> [[nodiscard]] constexpr decltype(auto) InitAndWriteAll(Types &...aObjects)
     {
         Init();
-        WriteAll(aObjects...);
+
+        if constexpr (sizeof...(aObjects))
+        {
+            WriteAll(aObjects...);
+        }
+
         return Release();
     }
 
@@ -272,20 +286,18 @@ class IStreamable
     [[nodiscard]] constexpr decltype(auto) AssignAndWriteAll(type_stream &&aStream, const Types &...aObjects)
     {
         Assign(move(aStream), false);
-        WriteAll(aObjects...);
+
+        if constexpr (sizeof...(aObjects))
+        {
+            WriteAll(aObjects...);
+        }
+
         return Release();
     }
 
-    /**
-     * @brief Reads the objects from the stream and clears it
-     * @tparam ...Types the objects's type
-     * @param ...aObjects the object be read
-     */
-    template <typename... Types> constexpr void ReadAllAndClear(Types &...aObjects)
-    {
-        ReadAll(aObjects...);
-        Clear();
-    }
+#pragma endregion
+
+#pragma region ReadAllX
 
     /**
      * @brief Reads all the object from the stream
@@ -303,6 +315,23 @@ class IStreamable
             ReadAll(aObjects...);
         }
     }
+
+    /**
+     * @brief Reads the objects from the stream and clears it
+     * @tparam ...Types the objects's type
+     * @param ...aObjects the object be read
+     */
+    template <typename... Types> constexpr void ReadAllAndClear(Types &...aObjects)
+    {
+        if constexpr (sizeof...(aObjects))
+        {
+            ReadAll(aObjects...);
+        }
+
+        Clear();
+    }
+
+#pragma endregion
 
   private:
     size_t mIndex{};
@@ -334,94 +363,6 @@ class IStreamable
     }
 
     /**
-     * @brief Writes the object in the stream
-     * @tparam Type the object's type
-     * @param aObject the object
-     * @param aSize the object's size in bytes
-     * @note aSize is required for unhandled types
-     */
-    template <typename Type = void *> constexpr void Write(const Type &aObject, const type_size_sub_stream aSize = 0)
-    {
-        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
-
-        if constexpr (is_basic_string_v<Type>)
-        {
-            auto size = type_size_sub_stream(aObject.size() * sizeof(Type::value_type));
-            WriteObject(aObject.data(), size);
-        }
-        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
-        {
-            Write(aObject.wstring());
-        }
-        else if constexpr (std::is_standard_layout_v<Type>)
-        {
-            WriteObjectOfKnownSize(&aObject, sizeof(Type));
-        }
-        // last check because types like string and path are ranges
-        else if constexpr (std::ranges::range<Type>)
-        {
-            WriteRange(aObject);
-        }
-        else
-        {
-            WriteObject(&aObject, aSize);
-        }
-    }
-
-    /**
-     * @brief Writes all the object in the stream
-     * @tparam Type the current object's type
-     * @tparam ...Types the rest of object's types
-     * @param aObject the current object
-     * @param ...aObjects the rest of object
-     */
-    template <typename Type, typename... Types> constexpr void WriteAll(const Type &aObject, const Types &...aObjects)
-    {
-        Write(aObject);
-
-        if constexpr (sizeof...(aObjects))
-        {
-            WriteAll(aObjects...);
-        }
-    }
-
-    /**
-     * @brief Reads the object from the stream
-     * @note for unhandled object types will return a span
-     * @tparam Type the object's type
-     * @return the object
-     */
-    template <typename Type = std::span<type_stream_value>> [[nodiscard]] constexpr decltype(auto) Read() noexcept
-    {
-        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
-
-        if constexpr (is_basic_string_v<Type>)
-        {
-            const auto [ptr, size] = ReadStream<Type>();
-            return Type(ptr, size);
-        }
-        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
-        {
-            const auto [ptr, size] = ReadStream<Type>();
-            return basic_string<std::filesystem::path::value_type>(ptr, size);
-        }
-        // std::is_standard_layout_v is true for span but we want the last branch for spans so:
-        else if constexpr (std::is_standard_layout_v<Type> && !std::is_same_v<Type, std::span<type_stream_value>>)
-        {
-            return ReadObjectOfKnownSize<Type>();
-        }
-        // last check because types like string and path are ranges
-        else if constexpr (std::ranges::range<Type>)
-        {
-            return ReadRange<Type>();
-        }
-        else
-        {
-            return ReadObject();
-        }
-    }
-
-    /**
      * @brief Releases the stream
      * @return the rvalue stream
      */
@@ -439,6 +380,78 @@ class IStreamable
         mIndex = {};
     }
 
+#pragma region WriteX
+
+    /**
+     * @brief Writes the size as bytes to the stream
+     * @param aSize the size
+     */
+    void WriteSize(const type_size_sub_stream aSize)
+    {
+        assert(aSize);
+
+        // write the stream's size as bytes
+        const auto sizePtr = reinterpret_cast<const type_stream_value *>(&aSize);
+        mStream.insert(mStream.end(), sizePtr, sizePtr + sizeof(type_size_sub_stream));
+        mIndex += sizeof(type_size_sub_stream);
+    }
+
+    /**
+     * @brief Writes all the object in the stream
+     * @tparam Type the current object's type
+     * @tparam ...Types the rest of object's types
+     * @param aObject the current object
+     * @param ...aObjects the rest of object
+     */
+    template <typename Type, typename... Types> constexpr void WriteAll(Type &aObject, Types &...aObjects)
+    {
+        Write(aObject);
+
+        if constexpr (sizeof...(aObjects))
+        {
+            WriteAll(aObjects...);
+        }
+    }
+
+    /**
+     * @brief Writes the object in the stream
+     * @tparam Type the object's type
+     * @param aObject the object
+     * @param aSize the object's size in bytes
+     * @note aSize is required for unhandled types
+     */
+    template <typename Type = void *> constexpr void Write(Type &aObject, const type_size_sub_stream aSize = 0)
+    {
+        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
+
+        if constexpr (is_basic_string_v<Type>)
+        {
+            auto size = type_size_sub_stream(aObject.size() * sizeof(Type::value_type));
+            WriteObject(aObject.data(), size);
+        }
+        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
+        {
+            Write(aObject.wstring());
+        }
+        else if constexpr (std::is_standard_layout_v<Type>)
+        {
+            WriteObjectOfKnownSize(&aObject, sizeof(Type));
+        }
+        else if constexpr (std::is_base_of_v<IStreamable, Type>)
+        {
+            WriteStreamable(aObject);
+        }
+        // last check because types like string and path are ranges
+        else if constexpr (std::ranges::range<Type>)
+        {
+            WriteRange(aObject);
+        }
+        else
+        {
+            WriteObject(&aObject, aSize);
+        }
+    }
+
     /**
      * @brief Writes a number of bytes from stream
      * @param aStream the stream
@@ -452,6 +465,21 @@ class IStreamable
         const auto streamPtr = reinterpret_cast<const type_stream_value *>(aStream);
         mStream.insert(mStream.end(), streamPtr, streamPtr + aSize);
         mIndex += aSize;
+    }
+
+    /**
+     * @brief Writes an object that directly implements IStreamable
+     * @param aStreamable the IStreamable object
+     */
+    void WriteStreamable(IStreamable &aStreamable)
+    {
+        const auto streamableSize = aStreamable.GetObjectsSize();
+        WriteSize(type_size_sub_stream(streamableSize));
+        auto stream(aStreamable.ToStream());
+
+        // write the streamable
+        mStream.insert(mStream.end(), stream.cbegin(), stream.cend());
+        mIndex += streamableSize;
     }
 
     /**
@@ -486,59 +514,101 @@ class IStreamable
         }
     }
 
-    /**
-     * @brief Reads any nested range from the stream
-     * @tparam Type the nested range object type
-     * @return the nested range object
-     */
-    template <typename Type> [[nodiscard]] constexpr decltype(auto) ReadRange()
-    {
-        Type object{};
-        const auto size = ReadSize();
+#pragma endregion
 
-        if constexpr (StreamableSizeFinder::FindRangeLayersCount<Type>() > 1)
-        {
-            for (size_t i = 0; i < size; i++)
-            {
-                object.insert(std::ranges::cend(object), ReadRange<typename Type::value_type>());
-            }
-        }
-        else
-        {
-            for (size_t i = 0; i < size; i++)
-            {
-                object.insert(std::ranges::cend(object), Read<typename Type::value_type>());
-            }
-        }
-
-        return object;
-    }
-
-    /**
-     * @brief Writes the size as bytes to the stream
-     * @param aSize the size
-     */
-    void WriteSize(const type_size_sub_stream aSize)
-    {
-        assert(aSize);
-
-        // write the stream's size as bytes
-        const auto sizePtr = reinterpret_cast<const type_stream_value *>(&aSize);
-        mStream.insert(mStream.end(), sizePtr, sizePtr + sizeof(type_size_sub_stream));
-        mIndex += sizeof(type_size_sub_stream);
-    }
-
+#pragma region ReadX
     /**
      * @brief Reads the size of the current sub stream inside the stream
      * @return the current sub stream size
      */
     [[nodiscard]] decltype(auto) ReadSize() noexcept
     {
-        assert(mIndex + sizeof(type_size_sub_stream) <= mStream.size());
-
         const auto sizePtr = reinterpret_cast<type_size_sub_stream *>(mStream.data() + mIndex);
         mIndex += sizeof(type_size_sub_stream);
         return *sizePtr;
+    }
+
+    /**
+     * @brief Reads the object from the stream
+     * @note for unhandled object types will return a span
+     * @tparam Type the object's type
+     * @return the object
+     */
+    template <typename Type = std::span<type_stream_value>> [[nodiscard]] constexpr decltype(auto) Read() noexcept
+    {
+        static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
+
+        if constexpr (is_basic_string_v<Type>)
+        {
+            const auto [ptr, size] = ReadStream<Type>();
+            return Type(ptr, size);
+        }
+        else if constexpr (std::is_same_v<Type, std::filesystem::path>)
+        {
+            const auto [ptr, size] = ReadStream<Type>();
+            return basic_string<std::filesystem::path::value_type>(ptr, size);
+        }
+        // std::is_standard_layout_v is true for span but we want the last branch for spans so:
+        else if constexpr (std::is_standard_layout_v<Type> && !std::is_same_v<Type, std::span<type_stream_value>>)
+        {
+            return ReadObjectOfKnownSize<Type>();
+        }
+        else if constexpr (std::is_base_of_v<IStreamable, Type>)
+        {
+            return ReadStreamable<Type>();
+        }
+        // last check because types like string and path are ranges
+        else if constexpr (std::ranges::range<Type>)
+        {
+            return ReadRange<Type>();
+        }
+        else
+        {
+            return ReadObject();
+        }
+    }
+
+    /**
+     * @brief Reads an object that directly implements IStreamable
+     * @tparam Type object's type that directly implements IStreamable
+     * @return the IStreamable object
+     */
+    template <typename Type, std::enable_if_t<std::is_base_of_v<IStreamable, Type>, bool> = true>
+    [[nodiscard]] constexpr decltype(auto) ReadStreamable() noexcept
+    {
+        const auto streamableSize = ReadSize();
+        Type streamable({mStream.cbegin() + mIndex, mStream.cbegin() + mIndex + streamableSize});
+        mIndex += streamableSize;
+
+        return streamable;
+    }
+
+    /**
+     * @brief Reads any nested range from the stream
+     * @tparam Type the nested range object type
+     * @return the nested range object
+     */
+    template <std::ranges::range Range> [[nodiscard]] constexpr decltype(auto) ReadRange()
+    {
+        Range range{};
+        const auto size = ReadSize();
+
+        if constexpr (StreamableSizeFinder::FindRangeLayersCount<Range>() > 1)
+        {
+            for (size_t i = 0; i < size; i++)
+            {
+                range.insert(std::ranges::cend(range), ReadRange<typename Range::value_type>());
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < size; i++)
+            {
+                range.insert(std::ranges::cend(range), Read<typename Range::value_type>());
+            }
+        }
+
+        return range;
     }
 
     /**
@@ -546,7 +616,7 @@ class IStreamable
      * @tparam Type the stream's type
      * @return a pair containing the stream start and it's size
      */
-    template <typename Type> constexpr [[nodiscard]] decltype(auto) ReadStream() noexcept
+    template <typename Type> [[nodiscard]] constexpr decltype(auto) ReadStream() noexcept
     {
         const auto spen(ReadObject());
         const auto streamType = reinterpret_cast<Type::value_type *>(spen.data());
@@ -562,10 +632,9 @@ class IStreamable
     [[nodiscard]] decltype(auto) ReadObject() noexcept
     {
         const auto size = ReadSize();
-        assert(mIndex + size <= mStream.size());
-
         std::span<type_stream_value> spen(mStream.data() + mIndex, size);
         mIndex += size;
+
         return spen;
     }
 
@@ -576,22 +645,28 @@ class IStreamable
      */
     template <typename Type> [[nodiscard]] constexpr decltype(auto) ReadObjectOfKnownSize() noexcept
     {
-        assert(mIndex + sizeof(Type) <= mStream.size());
-
         const auto objectPtr = reinterpret_cast<Type *>(mStream.data() + mIndex);
         mIndex += sizeof(Type);
         return *objectPtr;
     }
+#pragma endregion
 };
 } // namespace hbann
 
 /*
  * TODO:
+ *  Features:
  *      - make it work with maps or pairs/tuples in general
+ *
+ *  Enchantments:
+ *      - do something about the copy from ReadStreamable
  *      - make useful methods static and public
- *      - use ToStream for devired objects from itself
  *      - don't leave all in IStreamable make a IStreamWriter, IStreamReader, IStreamBase...
  *      - make ReadRange better by reserving the size of the data from the beggining like in vectors
+ *
+ *  Bugs:
+ *      - fix crash on dereferencing end iterator for ranges with 0 items
+ *      - objects that implement IStreamable and have iterators, maybe will work but wrong anyways
  */
 
 #endif // !ISTREAMABLE_HPP
