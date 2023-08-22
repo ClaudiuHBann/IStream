@@ -50,6 +50,7 @@ class NestedRange : public IStreamable
 
     void Print()
     {
+        cout << "mDoubles: " << endl << endl;
         ::Print<double>(mDoubles);
     }
 
