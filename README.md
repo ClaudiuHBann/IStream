@@ -22,7 +22,7 @@ To use this library, simply get and include the header file `Streamable.hpp` int
 - **single-header** - just copy paste the file in your project
 - **simple format** - contains just the data itself and for the types that have a dynamic size a metadata representing just a uint32_t
 - **has no dependencies** - uses just the standard library
-- **accepts multiple data types** - beside **itself** ofc, **primitive types** (ex.: bool, unsigned int, double etc...), **strings** (ex.: std::string. std::wstring etc...), **any type with standard layout** (ex.: POD structs and classes, enums, etc...), **nested ranges** (ex.: vector, list, vector&lt;list&gt; etc...), and bonus types like *std::filesystem::path* etc...
+- **accepts multiple data types** - beside **itself** ofc, **primitive types** (ex.: bool, unsigned int, double etc...), **strings** (ex.: std::string. std::wstring etc...), **any type with standard layout** (ex.: POD structs and classes, enums, etc...), **nested ranges** (ex.: vector, list, vector&lt;list&gt; etc...), and bonus types like *std::filesystem::path* etc... ( doesn't support pointers... yet :) )
 
 ## Usage
 
