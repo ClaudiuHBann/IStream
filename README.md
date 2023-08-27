@@ -50,6 +50,12 @@ Those 3 macros have 4 types each that will be used depending on the situation:
 - **ISTREAMABLE_X_DERIVED**(...) - used by the intermediate classes
 - **ISTREAMABLE_X_DERIVED_END**(...) - used by the final classes
 
+But we are going to use the following macros to define everything in just one line:
+- **ISTREAMABLE_DEFINE**(className, ...) - used by simple classes
+- **ISTREAMABLE_DEFINE_DERIVED_START**(className, ...) - used by the base classes
+- **ISTREAMABLE_DEFINE_DERIVED**(className, baseClass, ...) - used by the intermediate classes
+- **ISTREAMABLE_DEFINE_DERIVED_END**(className, baseClass, ...) - used by the final classes
+
 ## TODO
 
 Features:
