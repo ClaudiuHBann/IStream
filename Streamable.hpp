@@ -33,6 +33,78 @@
 #define ISTREAMABLE_DESERIALIZE_DERIVED(...) IStreamable::ReadAll(__VA_ARGS__)
 #define ISTREAMABLE_DESERIALIZE_DERIVED_END(...) ISTREAMABLE_DESERIALIZE(__VA_ARGS__)
 
+#define ISTREAMABLE_DEFINE(className, ...)                                                                             \
+  public:                                                                                                              \
+    constexpr className(type_stream &&aStream) : IStreamable(move(aStream))                                            \
+    {                                                                                                                  \
+        ISTREAMABLE_DESERIALIZE(__VA_ARGS__);                                                                          \
+    }                                                                                                                  \
+                                                                                                                       \
+    constexpr type_stream &&ToStream() override                                                                        \
+    {                                                                                                                  \
+        return ISTREAMABLE_SERIALIZE(__VA_ARGS__);                                                                     \
+    }                                                                                                                  \
+                                                                                                                       \
+  protected:                                                                                                           \
+    constexpr size_t GetObjectsSize() const noexcept override                                                          \
+    {                                                                                                                  \
+        return ISTREAMABLE_GET_OBJECTS_SIZE(__VA_ARGS__);                                                              \
+    }
+
+#define ISTREAMABLE_DEFINE_DERIVED_START(className, ...)                                                               \
+  public:                                                                                                              \
+    constexpr className(type_stream &&aStream) : IStreamable(move(aStream))                                            \
+    {                                                                                                                  \
+        ISTREAMABLE_DESERIALIZE_DERIVED_START(__VA_ARGS__);                                                            \
+    }                                                                                                                  \
+                                                                                                                       \
+    constexpr type_stream &&ToStream() override                                                                        \
+    {                                                                                                                  \
+        return ISTREAMABLE_SERIALIZE_DERIVED_START(__VA_ARGS__);                                                       \
+    }                                                                                                                  \
+                                                                                                                       \
+  protected:                                                                                                           \
+    constexpr size_t GetObjectsSize() const noexcept override                                                          \
+    {                                                                                                                  \
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_START(__VA_ARGS__);                                                \
+    }
+
+#define ISTREAMABLE_DEFINE_DERIVED(className, baseClass, ...)                                                          \
+  public:                                                                                                              \
+    constexpr className(type_stream &&aStream) : baseClass(move(aStream))                                              \
+    {                                                                                                                  \
+        ISTREAMABLE_DESERIALIZE_DERIVED(__VA_ARGS__);                                                                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    constexpr type_stream &&ToStream() override                                                                        \
+    {                                                                                                                  \
+        return ISTREAMABLE_SERIALIZE_DERIVED(baseClass, __VA_ARGS__);                                                  \
+    }                                                                                                                  \
+                                                                                                                       \
+  protected:                                                                                                           \
+    constexpr size_t GetObjectsSize() const noexcept override                                                          \
+    {                                                                                                                  \
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED(baseClass, __VA_ARGS__);                                           \
+    }
+
+#define ISTREAMABLE_DEFINE_DERIVED_END(className, baseClass, ...)                                                      \
+  public:                                                                                                              \
+    constexpr className(type_stream &&aStream) : baseClass(move(aStream))                                              \
+    {                                                                                                                  \
+        ISTREAMABLE_DESERIALIZE_DERIVED_END(__VA_ARGS__);                                                              \
+    }                                                                                                                  \
+                                                                                                                       \
+    constexpr type_stream &&ToStream() override                                                                        \
+    {                                                                                                                  \
+        return ISTREAMABLE_SERIALIZE_DERIVED_END(baseClass, __VA_ARGS__);                                              \
+    }                                                                                                                  \
+                                                                                                                       \
+  protected:                                                                                                           \
+    constexpr size_t GetObjectsSize() const noexcept override                                                          \
+    {                                                                                                                  \
+        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(baseClass, __VA_ARGS__);                                       \
+    }
+
 #pragma endregion
 
 namespace hbann
@@ -59,15 +131,16 @@ struct has_method_reserve<Container, std::void_t<decltype(std::declval<Container
 
 template <typename> constexpr auto always_false = false; // used with static_assert
 
-template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<Type>;
+template <typename Type> constexpr auto is_basic_string_v = impl::is_basic_string_v<std::remove_cv_t<Type>>;
 template <typename Type> constexpr auto has_method_reserve_v = impl::has_method_reserve<Type>::value;
 
 class IStreamable;
 
 // useful type traits
 template <typename Type>
-constexpr auto is_accepted_no_range_v = is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> ||
-                                        std::is_standard_layout_v<Type> || std::is_base_of_v<IStreamable, Type>;
+constexpr auto is_accepted_no_range_v =
+    !std::is_pointer_v<Type> && (is_basic_string_v<Type> || std::is_same_v<Type, std::filesystem::path> ||
+                                 std::is_standard_layout_v<Type> || std::is_base_of_v<IStreamable, Type>);
 template <typename Type> constexpr auto is_accepted_v = std::ranges::range<Type> || is_accepted_no_range_v<Type>;
 
 #pragma endregion
@@ -323,7 +396,7 @@ class IStreamable
      * @param aObject the current object
      * @param ...aObjects the rest of object
      */
-    template <typename Type, typename... Types> constexpr void ReadAll(Type &aObject, Types &...aObjects) noexcept
+    template <typename Type, typename... Types> constexpr void ReadAll(Type &aObject, Types &...aObjects)
     {
         aObject = Read<Type>();
 
@@ -338,7 +411,7 @@ class IStreamable
      * @tparam ...Types the objects's type
      * @param ...aObjects the object be read
      */
-    template <typename... Types> constexpr void ReadAllAndClear(Types &...aObjects)
+    template <typename... Types> constexpr void ReadAllAndClear(Types &...aObjects) noexcept
     {
         if constexpr (sizeof...(aObjects))
         {
@@ -550,7 +623,7 @@ class IStreamable
      * @tparam Type the object's type
      * @return the object
      */
-    template <typename Type = std::span<type_stream_value>> [[nodiscard]] constexpr decltype(auto) Read() noexcept
+    template <typename Type = std::span<type_stream_value>> [[nodiscard]] constexpr decltype(auto) Read()
     {
         static_assert(is_accepted_v<Type>, "The object's type is not accepted!");
 
