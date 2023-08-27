@@ -9,6 +9,8 @@ using namespace std;
 
 class Shape : public IStreamable
 {
+    ISTREAMABLE_DEFINE_DERIVED_START(Shape, mType);
+
   public:
     enum class Type : uint8_t
     {
@@ -18,29 +20,13 @@ class Shape : public IStreamable
         CIRCLE
     };
 
-    Shape(type_stream &&aStream) : IStreamable(move(aStream))
-    {
-        ISTREAMABLE_DESERIALIZE_DERIVED_START(mType);
-    }
-
     Shape(const Type &aType) : mType(aType)
     {
-    }
-
-    type_stream &&ToStream() override
-    {
-        return ISTREAMABLE_SERIALIZE_DERIVED_START(mType);
     }
 
     void Print()
     {
         cout << format("mType = {}", (uint8_t)mType);
-    }
-
-  protected:
-    constexpr size_t GetObjectsSize() const noexcept override
-    {
-        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_START(mType);
     }
 
   private:
@@ -49,31 +35,17 @@ class Shape : public IStreamable
 
 class Rectangle : public Shape
 {
-  public:
-    Rectangle(type_stream &&aStream) : Shape(move(aStream))
-    {
-        ISTREAMABLE_DESERIALIZE_DERIVED(mLength, mWidth);
-    }
+    ISTREAMABLE_DEFINE_DERIVED(Rectangle, Shape, mLength, mWidth);
 
+  public:
     Rectangle(const double aLengthWidth) : Shape(Type::SQUARE), mLength(aLengthWidth), mWidth(aLengthWidth)
     {
-    }
-
-    type_stream &&ToStream() override
-    {
-        return ISTREAMABLE_SERIALIZE_DERIVED(Shape, mLength, mWidth);
     }
 
     void Print()
     {
         Shape::Print();
         cout << format(", mLength = {}, mWidth = {}", mLength, mWidth);
-    }
-
-  protected:
-    constexpr size_t GetObjectsSize() const noexcept override
-    {
-        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED(Shape, mLength, mWidth);
     }
 
   private:
@@ -83,31 +55,17 @@ class Rectangle : public Shape
 
 class Square : public Rectangle
 {
-  public:
-    Square(type_stream &&aStream) : Rectangle(move(aStream))
-    {
-        ISTREAMABLE_DESERIALIZE_DERIVED_END(mDiagonal);
-    }
+    ISTREAMABLE_DEFINE_DERIVED(Square, Rectangle, mDiagonal);
 
+  public:
     Square(const double aSide) : Rectangle(aSide), mDiagonal(aSide / std::sqrt(2))
     {
-    }
-
-    type_stream &&ToStream() override
-    {
-        return ISTREAMABLE_SERIALIZE_DERIVED_END(Rectangle, mDiagonal);
     }
 
     void Print()
     {
         Rectangle::Print();
         cout << format(", mDiagonal = {}", mDiagonal) << endl;
-    }
-
-  protected:
-    constexpr size_t GetObjectsSize() const noexcept override
-    {
-        return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(Rectangle, mDiagonal);
     }
 
   private:
