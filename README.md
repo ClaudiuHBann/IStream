@@ -27,6 +27,11 @@ To use this library, simply get and include the header file `Streamable.hpp` int
 ## Usage
 
 1. Inherit from the `IStreamable` class or any class that implements it.
+2. Use one of the macros **ISTREAMABLE_DEFINE_X**
+
+OR
+
+1. Inherit from the `IStreamable` class or any class that implements it.
 2. Implement the `Constructor(stream)` used for deserializing, simply by using the macro ISTREAMABLE_DESERIALIZE_X(object1, object2, ...)
 3. Implement the `ToStream()` method used for serializing, simply by using the macro ISTREAMABLE_SERIALIZE_X(object1, object2, ...)
 4. Implement the `GetObjectsSize` used for calculating the exact size required to store the objects, simply by using the macro ISTREAMABLE_GET_OBJECTS_SIZE_X(object1, object2, ...)
