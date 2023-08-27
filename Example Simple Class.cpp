@@ -33,20 +33,12 @@ wstring to_wstring(const guid &aGUID)
 
 class Something : public IStreamable
 {
-  public:
-    Something(type_stream &&aStream) : IStreamable(move(aStream))
-    {
-        ISTREAMABLE_DESERIALIZE(mID, mNickname, mPath, mIDK);
-    }
+    ISTREAMABLE_DEFINE(Something, mID, mNickname, mPath, mIDK);
 
-    Something(const guid &aID, const string &aNickname, const path &aPath, const size_t aAge)
+  public:
+    Something(const guid &aID, const wstring &aNickname, const path &aPath, const size_t aAge)
         : mID(aID), mNickname(aNickname), mPath(aPath), mIDK(aAge)
     {
-    }
-
-    type_stream &&ToStream() override
-    {
-        return ISTREAMABLE_SERIALIZE(mID, mNickname, mPath, mIDK);
     }
 
     void Print()
@@ -58,22 +50,16 @@ class Something : public IStreamable
               << endl;
     }
 
-  protected:
-    constexpr size_t GetObjectsSize() const noexcept override
-    {
-        return ISTREAMABLE_GET_OBJECTS_SIZE(mID, mNickname, mPath, mIDK);
-    }
-
   private:
     guid mID{};
-    string mNickname{};
+    wstring mNickname{};
     path mPath{};
     size_t mIDK{};
 };
 
 int main()
 {
-    Something smthStart(guid_random, "Smth", path_random, 123);
+    Something smthStart(guid_random, L"Smth", path_random, 123);
     smthStart.Print();
 
     Something smthEnd(smthStart.ToStream());
