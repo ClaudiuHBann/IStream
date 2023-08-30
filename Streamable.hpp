@@ -107,7 +107,7 @@ public:                                                                      \
   }                                                                          \
                                                                              \
 protected:                                                                   \
-  constexpr size_t GetObjectsSize() const noexcept override                  \
+  constexpr size_t GetObjectsSize() const noexcept final override            \
   {                                                                          \
     return ISTREAMABLE_GET_OBJECTS_SIZE_DERIVED_END(baseClass, __VA_ARGS__); \
   }
